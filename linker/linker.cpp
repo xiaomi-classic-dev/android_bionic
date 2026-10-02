@@ -479,7 +479,8 @@ static unsigned elfhash(const char* _name) {
   return h;
 }
 
-static ElfW(Sym)* soinfo_do_lookup(soinfo* si, const char* name, soinfo** lsi) {
+static ElfW(Sym)* soinfo_do_lookup(soinfo* si, const char* name, soinfo** lsi,
+                                 bool skip_executable = false) {
   unsigned elf_hash = elfhash(name);
   ElfW(Sym)* s = nullptr;
 
@@ -494,7 +495,7 @@ static ElfW(Sym)* soinfo_do_lookup(soinfo* si, const char* name, soinfo** lsi) {
    * Note that this is unlikely since static linker avoids generating
    * relocations for -Bsymbolic linked dynamic executables.
    */
-  if (si->has_DT_SYMBOLIC) {
+  if (!skip_executable && si->has_DT_SYMBOLIC) {
     DEBUG("%s: looking up %s in local scope (DT_SYMBOLIC)", si->name, name);
     s = soinfo_elf_lookup(si, elf_hash, name);
     if (s != nullptr) {
@@ -504,7 +505,7 @@ static ElfW(Sym)* soinfo_do_lookup(soinfo* si, const char* name, soinfo** lsi) {
 
   if (s == nullptr && somain != nullptr) {
     // 1. Look for it in the main executable unless we already did.
-    if (si != somain || !si->has_DT_SYMBOLIC) {
+    if (!skip_executable && (si != somain || !si->has_DT_SYMBOLIC)) {
       DEBUG("%s: looking up %s in executable %s",
             si->name, name, somain->name);
       s = soinfo_elf_lookup(somain, elf_hash, name);
@@ -535,7 +536,7 @@ static ElfW(Sym)* soinfo_do_lookup(soinfo* si, const char* name, soinfo** lsi) {
    * and some the first non-weak definition.   This is system dependent.
    * Here we return the first definition found for simplicity.  */
 
-  if (s == nullptr && !si->has_DT_SYMBOLIC) {
+  if (s == nullptr && !skip_executable && !si->has_DT_SYMBOLIC) {
     DEBUG("%s: looking up %s in local scope", si->name, name);
     s = soinfo_elf_lookup(si, elf_hash, name);
     if (s != nullptr) {
@@ -1465,6 +1466,7 @@ int soinfo::Relocate(ElfW(Rel)* rel, unsigned count) {
         *reinterpret_cast<ElfW(Addr)*>(reloc) += sym_addr - rel->r_offset;
         break;
       case R_ARM_COPY:
+#ifndef ENABLE_NON_PIE_SUPPORT
         /*
          * ET_EXEC is not supported so this should not happen.
          *
@@ -1476,6 +1478,40 @@ int soinfo::Relocate(ElfW(Rel)* rel, unsigned count) {
          */
         DL_ERR("%s R_ARM_COPY relocations are not supported", name);
         return -1;
+#else
+        if ((flags & FLAG_EXE) == 0) {
+          DL_ERR("%s R_ARM_COPY relocations only supported for ET_EXEC", name);
+          return -1;
+        }
+        count_relocation(kRelocCopy);
+        MARK(rel->r_offset);
+        TRACE_TYPE(RELO, "RELO %08x <- %d @ %08x %s", reloc, s->st_size, sym_addr, sym_name);
+        if (reloc == sym_addr) {
+          // Keep the executable's dependency scope, but resolve the copy's
+          // source outside the executable. CM12.1's lookup requires a non-null si.
+          const ElfW(Sym)* src = soinfo_do_lookup(this, sym_name, &lsi, true);
+          if (src == nullptr) {
+            DL_ERR("%s R_ARM_COPY relocation source cannot be resolved", name);
+            return -1;
+          }
+          if (lsi->has_DT_SYMBOLIC) {
+            DL_ERR("%s invalid R_ARM_COPY relocation against DT_SYMBOLIC shared "
+                   "library %s (built with -Bsymbolic?)", name, lsi->name);
+            return -1;
+          }
+          if (s->st_size < src->st_size) {
+            DL_ERR("%s R_ARM_COPY relocation size mismatch (%d < %d)",
+                   name, s->st_size, src->st_size);
+            return -1;
+          }
+          memcpy(reinterpret_cast<void*>(reloc),
+                 reinterpret_cast<void*>(src->st_value + lsi->load_bias), src->st_size);
+        } else {
+          DL_ERR("%s R_ARM_COPY relocation target cannot be resolved", name);
+          return -1;
+        }
+        break;
+#endif
 #elif defined(__i386__)
       case R_386_JMP_SLOT:
         count_relocation(kRelocAbsolute);
@@ -2401,11 +2437,13 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
   si->dynamic = nullptr;
   si->ref_count = 1;
 
+#ifndef ENABLE_NON_PIE_SUPPORT
   ElfW(Ehdr)* elf_hdr = reinterpret_cast<ElfW(Ehdr)*>(si->base);
   if (elf_hdr->e_type != ET_DYN) {
     __libc_format_fd(2, "error: only position independent executables (PIE) are supported.\n");
     exit(EXIT_FAILURE);
   }
+#endif
 
   // Use LD_LIBRARY_PATH and LD_PRELOAD (but only if we aren't setuid/setgid).
   parse_LD_LIBRARY_PATH(ldpath_env);
