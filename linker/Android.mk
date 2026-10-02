@@ -40,8 +40,12 @@ LOCAL_CPPFLAGS += \
 LOCAL_CFLAGS += -I$(LOCAL_PATH)/../libc/
 
 ifneq ($(LINKER_NON_PIE_EXECUTABLES_HEADER_DIR),)
-  LOCAL_CFLAGS += -DENABLE_NON_PIE_SUPPORT
+  LOCAL_CFLAGS += -DENABLE_NON_PIE_SUPPORT -DENABLE_NON_PIE_ALLOWLIST
   LOCAL_C_INCLUDES += $(LINKER_NON_PIE_EXECUTABLES_HEADER_DIR)
+  LOCAL_SRC_FILES += linker_non_pie.cpp
+else ifeq ($(TARGET_NEEDS_NON_PIE_SUPPORT),true)
+  # Preserve the original CM device flag when no executable list is supplied.
+  LOCAL_CFLAGS += -DENABLE_NON_PIE_SUPPORT
   LOCAL_SRC_FILES += linker_non_pie.cpp
 endif
 

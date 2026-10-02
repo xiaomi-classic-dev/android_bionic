@@ -24,6 +24,7 @@
  */
 
 #include <string.h>
+#ifdef ENABLE_NON_PIE_ALLOWLIST
 #include "linker_non_pie_executables.h"
 
 bool allow_non_pie(const char* executable) {
@@ -34,3 +35,9 @@ bool allow_non_pie(const char* executable) {
     }
     return false;
 }
+#else
+// TARGET_NEEDS_NON_PIE_SUPPORT retains the original upstream behavior.
+bool allow_non_pie(const char*) {
+    return true;
+}
+#endif
