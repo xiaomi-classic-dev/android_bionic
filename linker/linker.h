@@ -402,7 +402,8 @@ struct soinfo {
 
 bool soinfo_do_lookup(soinfo* si_from, const char* name, const version_info* vi,
                       soinfo** si_found_in, const soinfo::soinfo_list_t& global_group,
-                      const soinfo::soinfo_list_t& local_group, const ElfW(Sym)** symbol);
+                      const soinfo::soinfo_list_t& local_group, const ElfW(Sym)** symbol,
+                      bool skip_from = false);
 
 enum RelocationKind {
   kRelocAbsolute = 0,

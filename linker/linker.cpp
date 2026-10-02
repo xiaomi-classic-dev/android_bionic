@@ -697,7 +697,8 @@ uint32_t SymbolName::gnu_hash() {
 
 bool soinfo_do_lookup(soinfo* si_from, const char* name, const version_info* vi,
                       soinfo** si_found_in, const soinfo::soinfo_list_t& global_group,
-                      const soinfo::soinfo_list_t& local_group, const ElfW(Sym)** symbol) {
+                      const soinfo::soinfo_list_t& local_group, const ElfW(Sym)** symbol,
+                      bool skip_from) {
   SymbolName symbol_name(name);
   const ElfW(Sym)* s = nullptr;
 
@@ -712,7 +713,7 @@ bool soinfo_do_lookup(soinfo* si_from, const char* name, const version_info* vi,
    * Note that this is unlikely since static linker avoids generating
    * relocations for -Bsymbolic linked dynamic executables.
    */
-  if (si_from->has_DT_SYMBOLIC) {
+  if (!skip_from && si_from->has_DT_SYMBOLIC) {
     DEBUG("%s: looking up %s in local scope (DT_SYMBOLIC)", si_from->get_realpath(), name);
     if (!si_from->find_symbol_by_name(symbol_name, vi, &s)) {
       return false;
@@ -727,6 +728,7 @@ bool soinfo_do_lookup(soinfo* si_from, const char* name, const version_info* vi,
   if (s == nullptr) {
     bool error = false;
     global_group.visit([&](soinfo* global_si) {
+      if (skip_from && global_si == si_from) return true;
       DEBUG("%s: looking up %s in %s (from global group)",
           si_from->get_realpath(), name, global_si->get_realpath());
       if (!global_si->find_symbol_by_name(symbol_name, vi, &s)) {
@@ -751,6 +753,7 @@ bool soinfo_do_lookup(soinfo* si_from, const char* name, const version_info* vi,
   if (s == nullptr) {
     bool error = false;
     local_group.visit([&](soinfo* local_si) {
+      if (skip_from && local_si == si_from) return true;
       if (local_si == si_from && si_from->has_DT_SYMBOLIC) {
         // we already did this - skip
         return true;
@@ -2277,7 +2280,7 @@ bool soinfo::relocate(const VersionTracker& version_tracker, ElfRelIteratorT&& r
         if (reloc == sym_addr) {
             const ElfW(Sym)* src = nullptr;
 
-            if (!soinfo_do_lookup(NULL, sym_name, vi, &lsi, global_group, local_group, &src)) {
+            if (!soinfo_do_lookup(this, sym_name, vi, &lsi, global_group, local_group, &src, true)) {
                 DL_ERR("%s R_ARM_COPY relocation source cannot be resolved", get_realpath());
                 return false;
             }
