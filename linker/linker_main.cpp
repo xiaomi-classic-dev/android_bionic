@@ -27,6 +27,9 @@
  */
 
 #include "linker_main.h"
+#ifdef ENABLE_NON_PIE_SUPPORT
+#include "linker_non_pie.h"
+#endif
 
 #include <link.h>
 #include <sys/auxv.h>
@@ -385,7 +388,11 @@ static ElfW(Addr) linker_main(KernelArgumentBlock& args, const char* exe_to_load
   ElfW(Ehdr)* elf_hdr = reinterpret_cast<ElfW(Ehdr)*>(si->base);
 
   // We haven't supported non-PIE since Lollipop for security reasons.
-  if (elf_hdr->e_type != ET_DYN) {
+  if (elf_hdr->e_type != ET_DYN
+#ifdef ENABLE_NON_PIE_SUPPORT
+      && !(elf_hdr->e_type == ET_EXEC && allow_non_pie(exe_path.c_str()))
+#endif
+      ) {
     // We don't use async_safe_fatal here because we don't want a tombstone:
     // even after several years we still find ourselves on app compatibility
     // investigations because some app's trying to launch an executable that

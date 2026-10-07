@@ -199,6 +199,11 @@ cc_defaults {
             cppflags: ["-DUSE_LD_CONFIG_FILE"],
         },
         lineage: {
+            non_pie_executables_header_dir: {
+                cppflags: ["-DENABLE_NON_PIE_SUPPORT"],
+                include_dirs: ["%s"],
+                srcs: ["linker_non_pie.cpp"],
+            },
             target_process_sdk_version_override: {
                 cppflags: ["-DSDK_VERSION_OVERRIDES=\"%s\""],
             },
