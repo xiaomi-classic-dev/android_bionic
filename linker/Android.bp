@@ -59,6 +59,7 @@ cc_defaults {
     name: "linker_defaults",
     defaults: [
         "process_sdk_version_overrides_defaults",
+        "non_pie_executables_defaults",
         "shim_libs_defaults",
     ],
     arch: {
@@ -129,7 +130,7 @@ cc_defaults {
 cc_library_static {
     name: "liblinker_main",
     defaults: ["linker_defaults", "linker_all_targets"],
-    srcs: ["linker_main.cpp"],
+    srcs: ["linker_main.cpp", "linker_non_pie.cpp"],
 
     // Ensure that the compiler won't insert string function calls before ifuncs are resolved.
     cflags: ["-ffreestanding"],
