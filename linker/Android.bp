@@ -123,6 +123,23 @@ cc_defaults {
 // linker components
 // ========================================================
 
+soong_config_module_type {
+    name: "linker_legacy_vendor_cc_defaults",
+    module_type: "cc_defaults",
+    config_namespace: "bionic",
+    bool_variables: ["mione_legacy_non_pie"],
+    properties: ["cflags"],
+}
+
+linker_legacy_vendor_cc_defaults {
+    name: "linker_legacy_vendor_defaults",
+    soong_config_variables: {
+        mione_legacy_non_pie: {
+            cflags: ["-DMIONE_LEGACY_NON_PIE"],
+        },
+    },
+}
+
 // Enable a module on all targets the linker runs on (ordinary Android targets, Linux Bionic, and
 // native bridge implementations).
 cc_defaults {
@@ -138,6 +155,7 @@ cc_library_static {
     defaults: [
         "linker_defaults",
         "linker_all_targets",
+        "linker_legacy_vendor_defaults",
     ],
     srcs: ["linker_main.cpp"],
 
