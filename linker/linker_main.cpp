@@ -294,6 +294,29 @@ static void platform_properties_init() {
 #endif
 }
 
+#if defined(__arm__) && defined(MIONE_LEGACY_NON_PIE)
+// The standard ARM linker also serves MiOne's fixed-address vendor daemons.
+// Admit only kernel-loaded executables at the original exact vendor paths.
+static bool mione_legacy_executable(const char* path) {
+  static constexpr const char* names[] = {
+    "/vendor/bin/cnd", "/system/vendor/bin/cnd",
+    "/vendor/bin/netmgrd", "/system/vendor/bin/netmgrd",
+    "/vendor/bin/qmuxd", "/system/vendor/bin/qmuxd",
+    "/vendor/bin/rmt_storage", "/system/vendor/bin/rmt_storage",
+    "/vendor/bin/bridgemgrd", "/system/vendor/bin/bridgemgrd",
+    "/vendor/bin/gpsone_daemon", "/system/vendor/bin/gpsone_daemon",
+    "/vendor/bin/port-bridge", "/system/vendor/bin/port-bridge",
+    "/vendor/bin/qmiproxy", "/system/vendor/bin/qmiproxy",
+    "/vendor/bin/usbhub", "/system/vendor/bin/usbhub",
+    "/vendor/bin/usbhub_init", "/system/vendor/bin/usbhub_init",
+  };
+  for (const char* allowed : names) {
+    if (strcmp(path, allowed) == 0) return true;
+  }
+  return false;
+}
+#endif
+
 static ElfW(Addr) linker_main(KernelArgumentBlock& args, const char* exe_to_load) {
   ProtectedDataGuard guard;
 
@@ -422,7 +445,12 @@ static ElfW(Addr) linker_main(KernelArgumentBlock& args, const char* exe_to_load
 
   // For security reasons we dropped non-PIE support in API level 21,
   // and the NDK no longer supports earlier API levels.
-  if (elf_hdr->e_type != ET_DYN) {
+  bool allow_legacy_executable = false;
+#if defined(__arm__) && defined(MIONE_LEGACY_NON_PIE)
+  allow_legacy_executable = exe_to_load == nullptr && elf_hdr->e_type == ET_EXEC &&
+                            mione_legacy_executable(exe_info.path.c_str());
+#endif
+  if (elf_hdr->e_type != ET_DYN && !allow_legacy_executable) {
     __linker_error("error: %s: Android only supports position-independent "
                    "executables (-fPIE)", exe_info.path.c_str());
   }
